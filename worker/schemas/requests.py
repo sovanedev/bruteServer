@@ -5,4 +5,3 @@ class InstallHash(BaseModel):
     hash: str
     hash_type: int
     dest: str = Field("~/worker/hashes/")
-    status: str

@@ -122,6 +122,124 @@ async def hashInWork():
 
     return response
 
+@app.get('/getUploadedBases')
+async def hashInWork():
+    response = {
+        'servertime': time.time(),
+        'status': 'ok',
+        'bases': defaultdict(dict),
+    }
+
+    try:
+        all_results = storage.all('bases')
+
+        for res in all_results:
+            id = res.get('file_name')
+            file_path = res.get('file_path')
+
+            response['bases'][id] = {
+                'file_path': file_path,
+            }
+
+    except Exception as ex:
+        response['status'] = 'error'
+        response['error'] = str(ex)
+
+    return response
+
+@app.get('/getUploadedRules')
+async def hashInWork():
+    response = {
+        'servertime': time.time(),
+        'status': 'ok',
+        'rules': defaultdict(dict),
+    }
+
+    try:
+        all_results = storage.all('rules')
+
+        for res in all_results:
+            id = res.get('file_name')
+            file_path = res.get('file_path')
+
+            response['rules'][id] = {
+                'file_path': file_path,
+            }
+
+    except Exception as ex:
+        response['status'] = 'error'
+        response['error'] = str(ex)
+
+    return response
+
+@app.post('/reInstallbases')
+async def hashInWork():
+    response = {
+        'servertime': time.time(),
+        'status': 'ok',
+        'bases': defaultdict(dict),
+    }
+
+    try:
+        all_results = storage.all('bases')
+
+        for res in all_results:
+            id = res.get('file_name')
+            file_path = res.get('file_path')
+
+            response['bases'][id] = {
+                'file_path': file_path,
+            }
+
+        storage.delall('bases')
+
+        base_dir = "/worker/bases"
+        if os.path.exists(base_dir):
+            for file in os.listdir(base_dir):
+                file_path = os.path.join(base_dir, file)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+
+    except Exception as ex:
+        response['status'] = 'error'
+        response['error'] = str(ex)
+
+    return response
+
+@app.post('/reInstallrules')
+async def hashInWork():
+    response = {
+        'servertime': time.time(),
+        'status': 'ok',
+        'rules': defaultdict(dict),
+    }
+
+    try:
+        all_results = storage.all('rules')
+
+        for res in all_results:
+            id = res.get('file_name')
+            file_path = res.get('file_path')
+
+            response['rules'][id] = {
+                'file_path': file_path,
+            }
+
+        storage.delall('rules')
+
+        base_dir = "/worker/rules"
+        if os.path.exists(base_dir):
+            for file in os.listdir(base_dir):
+                file_path = os.path.join(base_dir, file)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+
+    except Exception as ex:
+        response['status'] = 'error'
+        response['error'] = str(ex)
+
+    return response
+
 async def process_hashqueue():
     runner = HashcatRunner()
     while True:

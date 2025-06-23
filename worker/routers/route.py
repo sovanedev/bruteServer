@@ -240,65 +240,69 @@ async def hashInWork():
 
     return response
 
-async def process_hashqueue():
+MAX_GPUS = 8
+
+async def run_task_on_gpu(task, gpu_id):
     runner = HashcatRunner()
+    try:
+        hash_path = Path(f"/tmp/{task['id']}.hash")
+        hash_path.write_text(task["hash"])
+
+        output_path = Path(f"/worker/{task['id']}.txt")
+        storage.update('hashqueue', {'status': 'inproccess'}, id=task['id'], rule=task.get('rule'), base=task.get('base'))
+
+        extra_args = [
+            '--opencl-device-types=2',
+            f'--gpu-devices={gpu_id}'
+        ]
+
+        runner.start_bruteforce(
+            hash_file=str(hash_path),
+            dict_file=task.get('base'),
+            rule_file=task.get('rule'),
+            output_file=str(output_path),
+            hash_type=task.get("hash_type", 28200),
+            id=task["id"],
+            extra_args=extra_args
+        )
+
+        while runner.is_running():
+            await asyncio.sleep(1)
+
+        status = runner.get_status()
+        output_file = Path(status.get('output_file'))
+        storage.delete('hashqueue', id=runner.id, status='inproccess')
+
+        if output_file.exists():
+            storage.insert('result', {
+                'id': runner.id,
+                'hash': output_file.read_text().strip(),
+                'hash_path': str(output_file),
+                'result': True
+            })
+            storage.delall('hashqueue')
+        
+        runner.reset()
+    except Exception as e:
+        print(f"Error on GPU {gpu_id} for task {task['id']}: {e}")
+
+async def process_hashqueue():
     while True:
-        try:
-            print('work start')
-            if runner.is_running():
-                print('уже работает')
-                await asyncio.sleep(30)
-                continue
-
-            if runner.status in ['done', 'error']:
-                print("Завершил брут")
-                status = runner.get_status()
-                output_file = Path(status.get('output_file'))
-                storage.delete('hashqueue', id=runner.id, status='inproccess')
-
-                if len(storage.all('hashqueue')) == 0 or output_file.exists():
-                    print('ЗАПИСЫВАЮ RESULT')
-                    storage.insert('result', {
-                        'id': runner.id,
-                        'hash': output_file.read_text().strip() if output_file.exists() else None,
-                        'hash_path': str(output_file),
-                        'result': output_file.exists()
-                    })
-
-                    storage.delall('hashqueue') if output_file.exists() else None
-                
-                runner.reset()
-
-            queue = storage.all("hashqueue")
-            print(f'Queue length: {len(queue)}')
-
-            for task in queue:
-                if task.get("status") != "waiting":
-                    continue
-                
-                print(f'Взял хеш {task}')
-
-                hash_path = Path(f"/tmp/{task['id']}.hash")
-                hash_path.write_text(task["hash"])
-
-                output_path = Path(f"/worker/{task['id']}.txt")
-                storage.update('hashqueue', {'status': 'inproccess'}, id=task['id'], rule=task.get('rule'), base=task.get('base'))
-                runner.start_bruteforce(
-                    hash_file=str(hash_path),
-                    dict_file=task.get('base'),
-                    rule_file=task.get('rule'),
-                    output_file=str(output_path),
-                    hash_type=task.get("hash_type", 28200),
-                    id=task["id"]
-                )
-
-                break
-
-            print('work end')
+        queue = [task for task in storage.all("hashqueue") if task.get("status") == "waiting"]
+        print(f"Queue length: {len(queue)}")
+        if not queue:
             await asyncio.sleep(5)
-        except Exception as e:
-            print(f"process_hashqueue: {e}")
-            await asyncio.sleep(5)
+            continue
+
+        batch = queue[:MAX_GPUS]
+
+        tasks = []
+        for gpu_id, task in enumerate(batch):
+            tasks.append(run_task_on_gpu(task, gpu_id))
+
+        await asyncio.gather(*tasks)
+
+        await asyncio.sleep(1)
 
 @app.on_event("startup")
 async def start_background_worker():

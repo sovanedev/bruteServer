@@ -109,3 +109,4 @@ class HashcatRunner:
         self.error = None
         self._thread = None
         self.id = None
+        self.env = None

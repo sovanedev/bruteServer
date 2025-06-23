@@ -1,6 +1,6 @@
 import subprocess
 import threading
-import time
+import time, os
 from pathlib import Path
 
 class HashcatRunner:
@@ -14,6 +14,8 @@ class HashcatRunner:
         self.error = None
         self._thread = None
 
+        self.env = None
+
         self.id = None
 
     def _run_hashcat(self, args):
@@ -26,6 +28,7 @@ class HashcatRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                env=self.env
             )
             stdout, stderr = self.process.communicate()
             print("stdout:", stdout)
@@ -56,6 +59,14 @@ class HashcatRunner:
 
         self.output_file = self.work_dir / output_file
 
+        session_dir = Path(f"/tmp/hashcat_gpu{extra_args[-1]}_{id}")
+        session_dir.mkdir(parents=True, exist_ok=True)
+        env = os.environ.copy()
+        env["HOME"] = str(session_dir)
+        env["XDG_CACHE_HOME"] = str(session_dir)
+
+        self.env = env
+
         args = [
             "-m", str(hash_type),
             "-a", "0",
@@ -63,7 +74,8 @@ class HashcatRunner:
             dict_file,
             "-r", rule_file,
             "--outfile", str(self.output_file),
-            "--potfile-disable"
+            "--potfile-disable",
+            "--session", f"session_{id}"
         ]
 
         if extra_args:
